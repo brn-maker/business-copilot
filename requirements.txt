@@ -1,0 +1,31 @@
+# Coffee Analytics Copilot - Requirements
+# Python 3.11+ required
+# Install with: pip install -r requirements.txt
+
+# Core web framework
+streamlit==1.40.1
+watchdog==4.0.2
+
+# Data processing & analysis
+pandas==2.2.3
+openpyxl==3.1.5
+numpy==1.26.4
+scipy==1.13.1
+statsmodels==0.14.2
+
+# Time-series forecasting
+prophet==1.1.5
+
+# Visualization
+plotly==5.24.1
+
+# LLM & AI orchestration
+langchain>=0.2.0
+langchain-core>=0.2.0
+langchain-openai>=0.1.0
+langchain-openrouter>=0.2.0
+langgraph>=0.2.0
+
+# Utilities
+python-dotenv==1.0.1
+requests==2.32.3
