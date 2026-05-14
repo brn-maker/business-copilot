@@ -13,10 +13,7 @@ numpy==1.26.4
 scipy==1.13.1
 statsmodels==0.14.2
 
-# Time-series forecasting
-prophet==1.1.5
-
-# Visualization
+# Visualization (install before heavy packages)
 plotly==5.24.1
 
 # LLM & AI orchestration
@@ -29,3 +26,6 @@ langgraph>=0.2.0
 # Utilities
 python-dotenv==1.0.1
 requests==2.32.3
+
+# Time-series forecasting (heavy — install last)
+prophet==1.1.5
