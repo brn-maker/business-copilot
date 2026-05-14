@@ -18,22 +18,22 @@ class ModelRouter:
     
     # Model configurations (OpenRouter model IDs)
     FAST_MODELS = {
-        "llama": "meta-llama/llama-3.1-70b-instruct",
-        "haiku": "anthropic/claude-3.5-haiku",  # Very fast, cheap
-        "mistral": "mistralai/mistral-7b-instruct",
+        "llama": "meta-llama/llama-3.3-70b-instruct:free",
+        "gemini": "google/gemini-2.5-flash-free",
+        "mistral": "mistralai/mistral-nemo:free",
     }
     
     SYNTHESIS_MODELS = {
-        "sonnet": "anthropic/claude-3.5-sonnet",  # Better reasoning for recommendations
-        "gpt4": "openai/gpt-4o-mini",  # General purpose synthesis
+        "gemini_pro": "google/gemini-2.5-flash-free", # Highly capable free model for synthesis
+        "llama_large": "meta-llama/llama-3.3-70b-instruct:free", 
     }
     
     def __init__(
         self,
         api_key: Optional[str] = None,
         use_openrouter: bool = True,
-        default_fast_model: str = "haiku",
-        default_synthesis_model: str = "sonnet",
+        default_fast_model: str = "gemini",
+        default_synthesis_model: str = "llama_large",
     ):
         """
         Initialize ModelRouter.
@@ -112,6 +112,6 @@ def create_model_router() -> ModelRouter:
     return ModelRouter(
         api_key=os.getenv("OPENROUTER_API_KEY"),
         use_openrouter=True,
-        default_fast_model="haiku",
-        default_synthesis_model="sonnet",
+        default_fast_model="gemini",
+        default_synthesis_model="llama_large",
     )
