@@ -282,109 +282,58 @@ def render_chat_interface():
 
 def process_user_query(user_query: str) -> str:
     """
-    Process user query and return response.
-    
-    This is where the agentic system gets invoked.
+    Process user query and return response using the LLM.
     """
     if not st.session_state.processed_data:
         return "Please upload data first using the sidebar."
     
-    # Extract data for analysis
-    combined_data = {}
-    for filename, sheets_dict in st.session_state.processed_data.items():
-        for sheet_type, df in sheets_dict.items():
-            if sheet_type not in combined_data:
-                combined_data[sheet_type] = df
-            # Could merge multiple files here if needed
-    
-    # Check what kind of analysis is requested
-    query_lower = user_query.lower()
-    
-    response_lines = []
-    
+    if getattr(st.session_state, "model_router", None) is None:
+        return "⚠️ AI models not initialized. Please set your OPENROUTER_API_KEY environment variable."
+        
     try:
-        # CORRELATION ANALYSIS
-        if any(word in query_lower for word in ["correlation", "relate", "relationship", "between"]):
-            response_lines.append("**📈 Correlation Analysis**\n")
-            
-            numeric_cols = combined_data[list(combined_data.keys())[0]].select_dtypes(include=['number']).columns.tolist()
-            
-            if len(numeric_cols) >= 2:
-                df = pd.concat(combined_data.values(), axis=1)
-                corr_result = analysis_tools.correlation_analysis(df, numeric_cols)
-                
-                if "strong_correlations" in corr_result:
-                    correlations = corr_result["strong_correlations"]
-                    if correlations:
-                        for corr in correlations[:5]:
-                            response_lines.append(
-                                f"- **{corr['variable_1']}** ↔️ **{corr['variable_2']}**: "
-                                f"r = {corr['correlation']:.3f} ({corr['strength']})"
-                            )
-                    else:
-                        response_lines.append("No strong correlations found (|r| > 0.6)")
+        from langchain_core.messages import HumanMessage, SystemMessage
         
-        # FORECASTING
-        elif any(word in query_lower for word in ["forecast", "predict", "next", "future", "trend"]):
-            response_lines.append("**📊 Forecasting Analysis**\n")
-            
-            # Find time-series data
-            for sheet_type, df in combined_data.items():
-                date_cols = df.select_dtypes(include=['datetime64']).columns.tolist()
-                numeric_cols = df.select_dtypes(include=['number']).columns.tolist()
+        # 1. Build a contextual summary of the uploaded data
+        data_context = []
+        for filename, sheets_dict in st.session_state.processed_data.items():
+            for sheet_type, df in sheets_dict.items():
+                data_context.append(f"### Sheet: {sheet_type}")
+                data_context.append(f"- Columns: {', '.join(df.columns.tolist())}")
+                data_context.append(f"- Rows: {len(df)}")
                 
-                if date_cols and numeric_cols:
-                    response_lines.append(f"📈 {sheet_type}:")
-                    response_lines.append(f"- Date range: {df[date_cols[0]].min()} to {df[date_cols[0]].max()}")
-                    response_lines.append(f"- Data points: {len(df)}")
-                    response_lines.append(f"- Ready for forecasting: {numeric_cols[0]}")
-        
-        # STATISTICS / SUMMARY
-        elif any(word in query_lower for word in ["summary", "stats", "statistics", "overview", "describe"]):
-            response_lines.append("**📊 Data Summary**\n")
-            
-            for sheet_type, df in combined_data.items():
-                response_lines.append(f"**{sheet_type}**")
-                response_lines.append(f"- Rows: {len(df)}")
-                response_lines.append(f"- Columns: {len(df.columns)}")
-                
+                # Add sample numerical statistics
                 numeric_cols = df.select_dtypes(include=['number']).columns.tolist()
                 if numeric_cols:
-                    response_lines.append(f"- Numeric: {', '.join(numeric_cols[:3])}")
-        
-        # RECOMMENDATIONS
-        elif any(word in query_lower for word in ["recommend", "suggest", "improve", "action", "strategy"]):
-            response_lines.append("**💡 Business Recommendations**\n")
-            response_lines.append("Based on available data, here are key areas to explore:")
-            response_lines.append("- Correlation analysis between inputs (fertilizer) and outputs (outturn)")
-            response_lines.append("- Time-series trends in quality grades and pricing")
-            response_lines.append("- Seasonal patterns in coffee production and hotel occupancy")
-            response_lines.append("- Revenue opportunities through value addition")
-        
-        # GENERAL QUERY
-        else:
-            response_lines.append("**📊 Analysis Results**\n")
-            
-            df = pd.concat(combined_data.values(), axis=1)
-            
-            response_lines.append(f"Dataset shape: {df.shape[0]} rows × {df.shape[1]} columns")
-            response_lines.append(f"Date range: {df.iloc[:, 0].min()} to {df.iloc[:, -1].max()}")
-            
-            numeric_cols = df.select_dtypes(include=['number']).columns.tolist()
-            if numeric_cols:
-                response_lines.append(f"\nNumeric variables: {', '.join(numeric_cols[:5])}")
+                    # Keep it concise to save tokens
+                    means = df[numeric_cols].mean().round(2).to_dict()
+                    data_context.append(f"- Averages: {means}")
+                data_context.append("")
                 
-                for col in numeric_cols[:2]:
-                    mean = df[col].mean()
-                    std = df[col].std()
-                    response_lines.append(f"- **{col}**: mean={mean:.2f}, std={std:.2f}")
+        context_str = "\n".join(data_context)
         
-        response = "\n".join(response_lines)
-    
+        # 2. Setup the prompt
+        system_prompt = f"""You are an expert Agricultural Business Intelligence Agent named Coffee Analytics Copilot.
+You have access to the following dataset context from the user's uploaded files:
+
+{context_str}
+
+Analyze the user's query and provide a specific, professional answer based ONLY on the data context provided above. 
+If the query asks for complex calculations (like regression or complex forecasting) that you cannot compute directly in your head, 
+explain what the data suggests based on the averages and trends, and recommend using the dashboard's built-in 'Quick Analysis' buttons (Correlations, Trends, etc.) to generate precise charts.
+Use markdown formatting (bolding, bullet points) to make your response clear and easy to read."""
+
+        # 3. Invoke the LLM
+        model = st.session_state.model_router.get_synthesis_model()
+        messages = [
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=user_query)
+        ]
+        
+        response = model.invoke(messages)
+        return response.content
+        
     except Exception as e:
-        response = f"⚠️ Analysis error: {str(e)}\n\nTry asking about specific data or correlations."
-    
-    return response
+        return f"⚠️ Error processing query with AI: {str(e)}\n\nPlease ensure your OpenRouter API key is valid."
 
 
 def render_analysis_section():
