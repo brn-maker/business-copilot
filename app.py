@@ -8,8 +8,11 @@ Provides web interface for:
 - Interactive visualizations and business recommendations
 """
 
-from dotenv import load_dotenv
-load_dotenv()  # Load .env file before anything reads os.getenv()
+try:
+    from dotenv import load_dotenv
+    load_dotenv()  # Load .env file (local dev only — no-op on Streamlit Cloud)
+except ImportError:
+    pass  # python-dotenv not available on Streamlit Cloud; secrets come from st.secrets
 
 import streamlit as st
 import pandas as pd
