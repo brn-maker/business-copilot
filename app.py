@@ -288,7 +288,8 @@ def process_user_query(user_query: str) -> str:
         return "Please upload data first using the sidebar."
     
     if getattr(st.session_state, "model_router", None) is None:
-        return "⚠️ AI models not initialized. Please set your OPENROUTER_API_KEY environment variable."
+        api_key_set = bool(os.getenv("OPENROUTER_API_KEY"))
+        return f"⚠️ AI models not initialized. Please set your OPENROUTER_API_KEY environment variable.\n\nAPI Key status: {'Set' if api_key_set else 'Not set'}"
         
     try:
         from langchain_core.messages import HumanMessage, SystemMessage
@@ -333,7 +334,9 @@ Use markdown formatting (bolding, bullet points) to make your response clear and
         return response.content
         
     except Exception as e:
-        return f"⚠️ Error processing query with AI: {str(e)}\n\nPlease ensure your OpenRouter API key is valid."
+        import traceback
+        error_details = traceback.format_exc()
+        return f"⚠️ Error processing query with AI: {str(e)}\n\nDetails:\n{error_details}\n\nPlease ensure your OpenRouter API key is valid."
 
 
 def render_analysis_section():

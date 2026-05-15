@@ -18,14 +18,14 @@ class ModelRouter:
     
     # Model configurations (OpenRouter model IDs)
     FAST_MODELS = {
-        "llama": "meta-llama/llama-3.3-70b-instruct:free",
-        "gemini": "google/gemini-2.5-flash-free",
-        "mistral": "mistralai/mistral-nemo:free",
+        "llama": "meta-llama/llama-3.1-8b-instruct",
+        "gemini": "google/gemma-2-9b-it",
+        "mistral": "mistralai/mistral-nemo",
     }
     
     SYNTHESIS_MODELS = {
-        "gemini_pro": "google/gemini-2.5-flash-free", # Highly capable free model for synthesis
-        "llama_large": "meta-llama/llama-3.3-70b-instruct:free", 
+        "gemini_pro": "google/gemma-2-9b-it", # Capable model for synthesis
+        "llama_large": "meta-llama/llama-3.1-70b-instruct",
     }
     
     def __init__(
@@ -60,7 +60,7 @@ class ModelRouter:
     def get_fast_model(self, model_key: Optional[str] = None):
         """Get a fast, cheap model for quick analysis tasks."""
         key = model_key or self.default_fast_model
-        model_id = self.FAST_MODELS.get(key, self.FAST_MODELS["haiku"])
+        model_id = self.FAST_MODELS.get(key, self.FAST_MODELS["gemini"])
         
         if self.use_openrouter:
             return ChatOpenRouter(
@@ -77,7 +77,7 @@ class ModelRouter:
     def get_synthesis_model(self, model_key: Optional[str] = None):
         """Get a more capable model for final synthesis and recommendations."""
         key = model_key or self.default_synthesis_model
-        model_id = self.SYNTHESIS_MODELS.get(key, self.SYNTHESIS_MODELS["sonnet"])
+        model_id = self.SYNTHESIS_MODELS.get(key, self.SYNTHESIS_MODELS["llama_large"])
         
         if self.use_openrouter:
             return ChatOpenRouter(
