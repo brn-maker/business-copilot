@@ -145,7 +145,7 @@ def render_sidebar():
         "Upload Excel files with agricultural data",
         type=["xlsx", "xls"],
         accept_multiple_files=True,
-        help="Supported sheets: Tenant Payments, Coffee Outturn, Grading, Hotel Sales, Value Addition Sales, Fertilizer Sales",
+        help="Supported sheets: Tenant Payments, Coffee Outturn, Grading, Hotel Sales, Value Addition Sales, Fertilizer Sales, Coffee Sales / Exports, Transactions",
         key=f"file_uploader_{st.session_state.uploader_key}",
     )
     
@@ -218,6 +218,8 @@ def render_data_summary():
            - Hotel Sales
            - Value Addition Sales
            - Fertilizer Sales
+           - Coffee Sales / Exports
+           - Transactions / Sales Logs
         
         2. **Ask questions** using natural language:
            - "Show correlation between fertilizer and outturn"
@@ -450,6 +452,7 @@ def main():
                             data=csv,
                             file_name=f"{sheet_type}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
                             mime="text/csv",
+                            key=f"download_{filename}_{sheet_type}",
                         )
         else:
             st.info("No data uploaded yet")

@@ -82,6 +82,8 @@ Upload Excel files with these sheet names (auto-detected):
 | **Hotel Sales** | Hotel/hospitality revenue | Date, Revenue, Occupancy |
 | **Value Addition Sales** | Processed coffee sales | Date, Revenue, Type |
 | **Fertilizer Sales** | Input costs & usage | Date, Amount, Type |
+| **Coffee Sales / Exports** | Coffee bean exports | Export Date, Coffee Bean Type, Grade, Quantity KG, Total Value USD |
+| **Transactions** | Retail shop transactions | Transaction ID, Transaction Date, Unit Price, Product Category |
 
 ### Example Data Structure
 
