@@ -30,6 +30,8 @@ class DataProcessor:
         "hotel_sales": ["hotel", "accommodation", "room sales", "hospitality"],
         "value_addition": ["value add", "processing", "roasting", "packag"],
         "fertilizer": ["fertilizer", "fert", "input cost", "agro input"],
+        "coffee_sales": ["coffee sales", "coffee_sales", "sales"],
+        "transactions": ["transactions", "transaction"],
     }
     
     def __init__(self):
