@@ -20,60 +20,119 @@ def create_timeseries_chart(
     include_trend: bool = True,
 ) -> go.Figure:
     """
-    Create interactive time-series chart with trend line.
-    
-    Args:
-        df: DataFrame with time-series data
-        date_column: Name of date column
-        value_column: Name of value column
-        title: Chart title
-        include_trend: Whether to include trend line
-        
-    Returns:
-        Plotly Figure
+    Create a crypto/forex TradingView-style time-series chart.
+    Dark theme, gradient area fill, range slider, trend-direction coloring.
     """
     df_sorted = df.sort_values(date_column).copy()
-    df_sorted[date_column] = pd.to_datetime(df_sorted[date_column])
-    
+    df_sorted[date_column] = pd.to_datetime(df_sorted[date_column], errors="coerce")
+    df_sorted = df_sorted.dropna(subset=[date_column, value_column])
+
+    values = df_sorted[value_column]
+    first_val = values.iloc[0] if len(values) > 0 else 0
+    last_val  = values.iloc[-1] if len(values) > 0 else 0
+    is_up = last_val >= first_val
+
+    line_color   = "#00c896" if is_up else "#ff4d6d"   # green up / red down
+    fill_color   = "rgba(0,200,150,0.12)" if is_up else "rgba(255,77,109,0.12)"
+    trend_color  = "rgba(255,200,0,0.85)"               # gold trend line
+
     fig = go.Figure()
-    
-    # Main line (spline = smooth curve)
+
+    # --- Area fill (below the line) ---
     fig.add_trace(go.Scatter(
         x=df_sorted[date_column],
-        y=df_sorted[value_column],
-        mode="lines+markers",
+        y=values,
+        mode="lines",
         name=value_column,
-        line=dict(color="#1f77b4", width=3, shape="spline", smoothing=1.3),
-        marker=dict(size=5, color="#1f77b4"),
+        line=dict(color=line_color, width=2),
         fill="tozeroy",
-        fillcolor="rgba(31, 119, 180, 0.08)",
+        fillcolor=fill_color,
+        hovertemplate="<b>%{x|%b %Y}</b><br>%{y:,.2f}<extra></extra>",
     ))
-    
-    # Trend line (linear regression)
+
+    # --- Trend line (linear regression) ---
     if include_trend and len(df_sorted) > 2:
         x_numeric = np.arange(len(df_sorted))
-        z = np.polyfit(x_numeric, df_sorted[value_column].dropna(), 1)
-        p = np.poly1d(z)
-        trend_y = p(x_numeric)
-        
-        fig.add_trace(go.Scatter(
-            x=df_sorted[date_column],
-            y=trend_y,
-            mode="lines",
-            name="Trend",
-            line=dict(color="#ff7f0e", width=2, dash="dash", shape="spline", smoothing=1.3),
-        ))
-    
+        try:
+            z = np.polyfit(x_numeric, values.values, 1)
+            p = np.poly1d(z)
+            trend_y = p(x_numeric)
+
+            fig.add_trace(go.Scatter(
+                x=df_sorted[date_column],
+                y=trend_y,
+                mode="lines",
+                name="Trend",
+                line=dict(color=trend_color, width=1.5, dash="dot"),
+                hoverinfo="skip",
+            ))
+        except Exception:
+            pass
+
+    # --- High / Low annotations ---
+    if len(values) > 0:
+        max_idx = values.idxmax()
+        min_idx = values.idxmin()
+        fig.add_annotation(
+            x=df_sorted.loc[max_idx, date_column], y=values[max_idx],
+            text=f"▲ {values[max_idx]:,.0f}",
+            showarrow=True, arrowhead=0, arrowcolor=line_color,
+            font=dict(color=line_color, size=11), bgcolor="rgba(0,0,0,0.5)",
+            bordercolor=line_color, borderwidth=1, arrowwidth=1,
+            ay=-30,
+        )
+        fig.add_annotation(
+            x=df_sorted.loc[min_idx, date_column], y=values[min_idx],
+            text=f"▼ {values[min_idx]:,.0f}",
+            showarrow=True, arrowhead=0, arrowcolor="#ff4d6d",
+            font=dict(color="#ff4d6d", size=11), bgcolor="rgba(0,0,0,0.5)",
+            bordercolor="#ff4d6d", borderwidth=1, arrowwidth=1,
+            ay=30,
+        )
+
+    # --- Layout: TradingView dark style ---
     fig.update_layout(
-        title=title,
-        xaxis_title=date_column,
-        yaxis_title=value_column,
+        title=dict(text=title, font=dict(color="#e0e0e0", size=15), x=0.01),
+        paper_bgcolor="#131722",
+        plot_bgcolor="#131722",
+        height=420,
+        margin=dict(l=10, r=10, t=50, b=10),
         hovermode="x unified",
-        height=500,
-        template="plotly_white",
+        legend=dict(
+            font=dict(color="#aaaaaa"),
+            bgcolor="rgba(0,0,0,0)",
+        ),
+        xaxis=dict(
+            title=None,
+            color="#555e70",
+            gridcolor="#1e2433",
+            showgrid=True,
+            zeroline=False,
+            rangeslider=dict(visible=True, thickness=0.04, bgcolor="#1a1f2e"),
+            rangeselector=dict(
+                bgcolor="#1a1f2e",
+                activecolor="#2a3150",
+                font=dict(color="#aaaaaa"),
+                buttons=[
+                    dict(count=3,  label="3M",  step="month", stepmode="backward"),
+                    dict(count=6,  label="6M",  step="month", stepmode="backward"),
+                    dict(count=1,  label="1Y",  step="year",  stepmode="backward"),
+                    dict(step="all", label="All"),
+                ],
+            ),
+        ),
+        yaxis=dict(
+            title=None,
+            color="#555e70",
+            gridcolor="#1e2433",
+            showgrid=True,
+            zeroline=False,
+            side="right",
+        ),
     )
-    
+
     return fig
+
 
 
 def create_regression_chart(
