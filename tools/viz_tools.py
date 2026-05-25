@@ -37,14 +37,16 @@ def create_timeseries_chart(
     
     fig = go.Figure()
     
-    # Main line
+    # Main line (spline = smooth curve)
     fig.add_trace(go.Scatter(
         x=df_sorted[date_column],
         y=df_sorted[value_column],
         mode="lines+markers",
         name=value_column,
-        line=dict(color="#1f77b4", width=2),
-        marker=dict(size=4),
+        line=dict(color="#1f77b4", width=3, shape="spline", smoothing=1.3),
+        marker=dict(size=5, color="#1f77b4"),
+        fill="tozeroy",
+        fillcolor="rgba(31, 119, 180, 0.08)",
     ))
     
     # Trend line (linear regression)
@@ -59,7 +61,7 @@ def create_timeseries_chart(
             y=trend_y,
             mode="lines",
             name="Trend",
-            line=dict(color="#ff7f0e", width=2, dash="dash"),
+            line=dict(color="#ff7f0e", width=2, dash="dash", shape="spline", smoothing=1.3),
         ))
     
     fig.update_layout(
