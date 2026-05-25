@@ -98,8 +98,9 @@ class DataProcessor:
             for col in df.columns
         ]
         
-        # Try to parse date columns
-        date_cols = [col for col in df.columns if any(d in col for d in ["date", "month", "year", "period"])]
+        # Force-convert any date/time column — covers Date, Month, Year, Period, Time, Week, Quarter
+        date_keywords = ["date", "month", "year", "period", "time", "week", "quarter"]
+        date_cols = [col for col in df.columns if any(d in col.lower() for d in date_keywords)]
         for col in date_cols:
             df = self._standardize_date_column(df, col)
         
@@ -118,21 +119,20 @@ class DataProcessor:
     
     def _standardize_date_column(self, df: pd.DataFrame, col: str) -> pd.DataFrame:
         """
-        Try to parse and standardize date column.
-        
-        Args:
-            df: DataFrame
-            col: Column name
-            
-        Returns:
-            DataFrame with standardized date column
+        Parse and standardize a date column to datetime64[ns].
+        Handles: datetime objects from openpyxl, strings, mixed types.
         """
         try:
-            df[col] = pd.to_datetime(df[col], infer_datetime_format=True, errors="coerce")
-        except:
-            # If parsing fails, leave as-is
+            # If already datetime, just ensure it's the right dtype
+            if pd.api.types.is_datetime64_any_dtype(df[col]):
+                return df
+            # Convert — works for datetime.datetime objects, strings, timestamps
+            converted = pd.to_datetime(df[col], infer_datetime_format=True, errors="coerce")
+            # Only replace if we successfully parsed at least 50% of rows
+            if converted.notna().sum() >= max(1, len(df) * 0.5):
+                df[col] = converted
+        except Exception:
             pass
-        
         return df
     
     def merge_datasets(

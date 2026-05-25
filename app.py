@@ -377,83 +377,94 @@ def render_analysis_section():
     
     with col3:
         if st.button("📉 Trends", use_container_width=True):
-            trend_plotted = False
-            for sheet_type, df in combined_data.items():
-                df = df.copy()
+            st.session_state["show_trends"] = True
 
-                # Step 1: Look for already-typed datetime columns
-                date_cols = [
-                    c for c in df.columns
-                    if pd.api.types.is_datetime64_any_dtype(df[c])
-                ]
+    # Render trends panel (persists after button click)
+    if st.session_state.get("show_trends") and combined_data:
+        st.markdown("---")
+        st.markdown("#### 📉 Trend Analysis")
 
-                # Step 2: Try columns with date-like keywords
-                if not date_cols:
-                    for c in df.columns:
-                        if any(kw in c.lower() for kw in ["date", "month", "year", "period", "time", "week", "quarter"]):
-                            try:
-                                parsed = pd.to_datetime(df[c], infer_datetime_format=True, errors="coerce")
-                                if parsed.notna().sum() >= len(df) * 0.5:  # at least 50% parseable
-                                    df[c] = parsed
-                                    date_cols.append(c)
-                                    break
-                            except Exception:
-                                pass
+        # --- Build list of plottable sheets ---
+        plottable = {}
+        for sheet_type, df in combined_data.items():
+            df = df.copy()
+            date_col = None
 
-                # Step 3: Try ALL object/string columns for date parsing
-                if not date_cols:
+            # Check already-typed datetime columns
+            dt_cols = [c for c in df.columns if pd.api.types.is_datetime64_any_dtype(df[c])]
+            if dt_cols:
+                date_col = dt_cols[0]
+            else:
+                # Try keyword-named columns
+                for c in df.columns:
+                    if any(kw in c.lower() for kw in ["date", "month", "year", "period", "time", "week", "quarter"]):
+                        try:
+                            parsed = pd.to_datetime(df[c], errors="coerce")
+                            if parsed.notna().sum() >= max(1, len(df) * 0.5):
+                                df[c] = parsed
+                                date_col = c
+                                break
+                        except Exception:
+                            pass
+                # Try all object columns as last resort
+                if not date_col:
                     for c in df.select_dtypes(include=["object"]).columns:
                         try:
-                            parsed = pd.to_datetime(df[c], infer_datetime_format=True, errors="coerce")
-                            if parsed.notna().sum() >= len(df) * 0.5:
+                            parsed = pd.to_datetime(df[c], errors="coerce")
+                            if parsed.notna().sum() >= max(1, len(df) * 0.5):
                                 df[c] = parsed
-                                date_cols.append(c)
+                                date_col = c
                                 break
                         except Exception:
                             pass
 
-                numeric_cols = df.select_dtypes(include=["number"]).columns.tolist()
+            numeric_cols = df.select_dtypes(include=["number"]).columns.tolist()
+            if numeric_cols:
+                plottable[sheet_type] = {
+                    "df": df,
+                    "date_col": date_col,  # None means use row index
+                    "numeric_cols": numeric_cols,
+                }
 
-                if not numeric_cols:
-                    continue
-
-                if date_cols:
-                    # Plot with a real date axis
-                    fig = viz_tools.create_timeseries_chart(
-                        df,
-                        date_cols[0],
-                        numeric_cols[0],
-                        title=f"{sheet_type} — {numeric_cols[0]} Over Time",
-                    )
-                    st.plotly_chart(fig, use_container_width=True)
-                    trend_plotted = True
-                    break
-                else:
-                    # Fallback: plot numeric column over row index
-                    st.info(
-                        f"ℹ️ No date column detected in **{sheet_type}**. "
-                        f"Plotting **{numeric_cols[0]}** by row order instead."
-                    )
-                    temp_df = df[[numeric_cols[0]]].reset_index(drop=True)
-                    temp_df["Row"] = temp_df.index + 1
-                    fig = viz_tools.create_timeseries_chart(
-                        temp_df,
-                        "Row",
-                        numeric_cols[0],
-                        title=f"{sheet_type} — {numeric_cols[0]} Trend",
-                    )
-                    st.plotly_chart(fig, use_container_width=True)
-                    trend_plotted = True
-                    break
-
-            if not trend_plotted:
-                all_cols = []
-                for sheet_type, df in combined_data.items():
-                    all_cols += [f"`{c}`" for c in df.columns[:8]]
-                st.warning(
-                    "⚠️ Could not find any plottable data. "
-                    f"Columns found: {', '.join(all_cols[:15])}"
+        if not plottable:
+            st.warning("⚠️ No numeric data found to plot trends for.")
+        else:
+            sel_col1, sel_col2 = st.columns(2)
+            with sel_col1:
+                selected_sheet = st.selectbox(
+                    "Select Dataset",
+                    options=list(plottable.keys()),
+                    key="trend_sheet",
                 )
+            with sel_col2:
+                available_metrics = plottable[selected_sheet]["numeric_cols"]
+                selected_metric = st.selectbox(
+                    "Select Metric",
+                    options=available_metrics,
+                    key="trend_metric",
+                )
+
+            sheet_info = plottable[selected_sheet]
+            df_plot = sheet_info["df"]
+            date_col = sheet_info["date_col"]
+
+            if date_col:
+                fig = viz_tools.create_timeseries_chart(
+                    df_plot,
+                    date_col,
+                    selected_metric,
+                    title=f"{selected_sheet} — {selected_metric} Over Time",
+                )
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.info(f"ℹ️ No date column found in **{selected_sheet}** — showing trend by row order.")
+                temp_df = df_plot[[selected_metric]].reset_index(drop=True)
+                temp_df["Row"] = temp_df.index + 1
+                fig = viz_tools.create_timeseries_chart(
+                    temp_df, "Row", selected_metric,
+                    title=f"{selected_sheet} — {selected_metric} Trend",
+                )
+                st.plotly_chart(fig, use_container_width=True)
 
 
 # ============================================================================
