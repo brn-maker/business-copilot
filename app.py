@@ -377,11 +377,31 @@ def render_analysis_section():
     
     with col3:
         if st.button("📉 Trends", use_container_width=True):
-            # Find and plot time-series
+            # Find and plot time-series across all sheets
+            trend_plotted = False
             for sheet_type, df in combined_data.items():
-                date_cols = df.select_dtypes(include=['datetime64']).columns.tolist()
+                # Match ALL datetime subtypes (datetime64[ns], datetime64[us], etc.)
+                date_cols = [
+                    c for c in df.columns
+                    if pd.api.types.is_datetime64_any_dtype(df[c])
+                ]
+
+                # Fallback: try columns with date-like names that are object dtype
+                if not date_cols:
+                    date_keyword_cols = [
+                        c for c in df.columns
+                        if any(kw in c.lower() for kw in ["date", "month", "year", "period"])
+                    ]
+                    for c in date_keyword_cols:
+                        try:
+                            df[c] = pd.to_datetime(df[c], infer_datetime_format=True, errors="coerce")
+                            if df[c].notna().any():
+                                date_cols.append(c)
+                        except Exception:
+                            pass
+
                 numeric_cols = df.select_dtypes(include=['number']).columns.tolist()
-                
+
                 if date_cols and numeric_cols:
                     fig = viz_tools.create_timeseries_chart(
                         df,
@@ -390,7 +410,14 @@ def render_analysis_section():
                         title=f"{sheet_type} Over Time",
                     )
                     st.plotly_chart(fig, use_container_width=True)
+                    trend_plotted = True
                     break
+
+            if not trend_plotted:
+                st.warning(
+                    "⚠️ No time-series data found. Make sure your dataset has a column named "
+                    "'date', 'month', 'year', or 'period' so the app can detect it."
+                )
 
 
 # ============================================================================
