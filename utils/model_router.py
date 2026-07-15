@@ -2,9 +2,10 @@
 Model Router: Intelligently routes requests to appropriate LLM based on task type.
 
 Cost Optimization Strategy:
-- Fast, cheap models (Llama 3.1 70B, Claude Haiku) for data processing & analysis
-- Larger models only for final synthesis & recommendations
-- Supports OpenRouter with fallback to OpenAI-compatible endpoints
+- Free-tier OpenRouter models only (IDs ending in :free, or openrouter/free)
+- Smaller free models for data processing & analysis
+- Larger free models for final synthesis & recommendations
+- openrouter/free auto-router as default (survives free-model retirements)
 """
 
 import os
@@ -14,53 +15,64 @@ from langchain_openai import ChatOpenAI
 
 
 class ModelRouter:
-    """Routes LLM requests to cost-optimized models."""
-    
+    """Routes LLM requests to cost-optimized free models on OpenRouter."""
+
+    # Only :free models (or openrouter/free). Paid models will fail on $0 balance.
+    # Free catalog changes often — prefer "auto" / openrouter/free when unsure.
+    # See: https://openrouter.ai/models?max_price=0
     FAST_MODELS = {
-        "llama": "meta-llama/llama-3.1-8b-instruct:free",
-        "gemini": "google/gemma-2-9b-it:free",
-        "mistral": "mistralai/mistral-nemo",
+        "auto": "openrouter/free",
+        "llama": "meta-llama/llama-3.2-3b-instruct:free",
+        "gemma": "google/gemma-4-26b-a4b-it:free",
+        "gemini": "google/gemma-4-26b-a4b-it:free",  # alias for older config
+        "nemotron": "nvidia/nemotron-nano-9b-v2:free",
+        "gpt_oss": "openai/gpt-oss-20b:free",
     }
-    
+
     SYNTHESIS_MODELS = {
-        "gemini_pro": "google/gemma-2-9b-it:free", # Capable model for synthesis
-        "llama_large": "meta-llama/llama-3.1-8b-instruct:free",
+        "auto": "openrouter/free",
+        "llama_large": "meta-llama/llama-3.3-70b-instruct:free",
+        "gemma_pro": "google/gemma-4-31b-it:free",
+        "gemini_pro": "google/gemma-4-31b-it:free",  # alias for older config
+        "qwen": "qwen/qwen3-coder:free",
     }
-    
+
     def __init__(
         self,
         api_key: Optional[str] = None,
         use_openrouter: bool = True,
-        default_fast_model: str = "gemini",
-        default_synthesis_model: str = "llama_large",
+        default_fast_model: str = "auto",
+        default_synthesis_model: str = "auto",
     ):
         """
         Initialize ModelRouter.
-        
+
         Args:
             api_key: OpenRouter API key (defaults to OPENROUTER_API_KEY env var)
             use_openrouter: Whether to use OpenRouter (default: True)
             default_fast_model: Default fast model key from FAST_MODELS
             default_synthesis_model: Default synthesis model key from SYNTHESIS_MODELS
+                Prefer "auto" (openrouter/free) on free tier — specific free
+                models are often rate-limited or temporarily offline.
         """
         self.api_key = api_key or os.getenv("OPENROUTER_API_KEY")
         self.use_openrouter = use_openrouter
         self.default_fast_model = default_fast_model
         self.default_synthesis_model = default_synthesis_model
-        
+
         if not self.api_key:
             raise ValueError(
                 "OpenRouter API key not found. Set OPENROUTER_API_KEY environment variable."
             )
-        
+
         self._fast_model_cache = None
         self._synthesis_model_cache = None
-    
+
     def get_fast_model(self, model_key: Optional[str] = None):
-        """Get a fast, cheap model for quick analysis tasks."""
+        """Get a fast free model for quick analysis tasks."""
         key = model_key or self.default_fast_model
-        model_id = self.FAST_MODELS.get(key, self.FAST_MODELS["gemini"])
-        
+        model_id = self.FAST_MODELS.get(key, self.FAST_MODELS["auto"])
+
         if self.use_openrouter:
             return ChatOpenRouter(
                 model=model_id,
@@ -72,13 +84,14 @@ class ModelRouter:
             model=model_id,
             api_key=self.api_key,
             temperature=0.3,
+            max_tokens=4000,
         )
-    
+
     def get_synthesis_model(self, model_key: Optional[str] = None):
-        """Get a more capable model for final synthesis and recommendations."""
+        """Get a more capable free model for final synthesis and recommendations."""
         key = model_key or self.default_synthesis_model
-        model_id = self.SYNTHESIS_MODELS.get(key, self.SYNTHESIS_MODELS["llama_large"])
-        
+        model_id = self.SYNTHESIS_MODELS.get(key, self.SYNTHESIS_MODELS["auto"])
+
         if self.use_openrouter:
             return ChatOpenRouter(
                 model=model_id,
@@ -90,12 +103,13 @@ class ModelRouter:
             model=model_id,
             api_key=self.api_key,
             temperature=0.7,
+            max_tokens=4000,
         )
-    
+
     def get_model_for_task(self, task_type: str):
         """
         Get the appropriate model for a specific task type.
-        
+
         Args:
             task_type: One of 'analysis', 'forecasting', 'synthesis', 'recommendations'
         """
@@ -113,6 +127,6 @@ def create_model_router() -> ModelRouter:
     return ModelRouter(
         api_key=os.getenv("OPENROUTER_API_KEY"),
         use_openrouter=True,
-        default_fast_model="gemini",
-        default_synthesis_model="llama_large",
+        default_fast_model=os.getenv("FAST_MODEL_KEY", "auto"),
+        default_synthesis_model=os.getenv("SYNTHESIS_MODEL_KEY", "auto"),
     )

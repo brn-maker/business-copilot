@@ -196,11 +196,11 @@ Upload ANY Excel file → System auto-detects relevant sheets:
 
 ### Change Default Models
 
-Edit `utils/model_router.py`:
+Edit `utils/model_router.py` (free tier needs `:free` model IDs only):
 ```python
 FAST_MODELS = {
-    "llama": "meta-llama/llama-3.1-70b-instruct",  # Change here
-    "haiku": "anthropic/claude-3.5-haiku",
+    "auto": "openrouter/free",  # Change key in create_model_router() defaults
+    "llama": "meta-llama/llama-3.2-3b-instruct:free",
 }
 ```
 

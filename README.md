@@ -249,18 +249,21 @@ Result: Revenue impact analysis
 
 ### Change Model Defaults
 
-Edit `utils/model_router.py`:
+Edit `utils/model_router.py` (use only `:free` models on a $0 OpenRouter balance):
 ```python
 FAST_MODELS = {
-    "llama": "meta-llama/llama-3.1-70b-instruct",  # Change here
-    "haiku": "anthropic/claude-3.5-haiku",
+    "auto": "openrouter/free",  # safest default — auto-picks free models
+    "llama": "meta-llama/llama-3.2-3b-instruct:free",
+    "gemma": "google/gemma-4-26b-a4b-it:free",
 }
 
 SYNTHESIS_MODELS = {
-    "sonnet": "anthropic/claude-3.5-sonnet",  # Or here
-    "gpt4": "openai/gpt-4o-mini",
+    "llama_large": "meta-llama/llama-3.3-70b-instruct:free",
+    "gemma_pro": "google/gemma-4-31b-it:free",
 }
 ```
+
+Or set env vars: `FAST_MODEL_KEY=auto` / `SYNTHESIS_MODEL_KEY=llama_large`.
 
 ### Customize Agent Behavior
 
