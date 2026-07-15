@@ -78,13 +78,16 @@ class ModelRouter:
                 model=model_id,
                 openrouter_api_key=self.api_key,
                 temperature=0.3,  # Lower temp for consistency in analysis
-                max_tokens=4000,  # Prevent credit limit errors on free tier
+                max_tokens=2000,  # Keep free-tier affordability headroom
+                app_url=os.getenv("OPENROUTER_APP_URL", "https://business-copilot.streamlit.app"),
+                app_title=os.getenv("OPENROUTER_APP_TITLE", "Coffee Analytics Copilot"),
             )
         return ChatOpenAI(
             model=model_id,
             api_key=self.api_key,
+            base_url="https://openrouter.ai/api/v1",
             temperature=0.3,
-            max_tokens=4000,
+            max_tokens=2000,
         )
 
     def get_synthesis_model(self, model_key: Optional[str] = None):
@@ -97,13 +100,16 @@ class ModelRouter:
                 model=model_id,
                 openrouter_api_key=self.api_key,
                 temperature=0.7,  # Higher temp for creative recommendations
-                max_tokens=4000,  # Prevent credit limit errors on free tier
+                max_tokens=2000,  # Keep free-tier affordability headroom
+                app_url=os.getenv("OPENROUTER_APP_URL", "https://business-copilot.streamlit.app"),
+                app_title=os.getenv("OPENROUTER_APP_TITLE", "Coffee Analytics Copilot"),
             )
         return ChatOpenAI(
             model=model_id,
             api_key=self.api_key,
+            base_url="https://openrouter.ai/api/v1",
             temperature=0.7,
-            max_tokens=4000,
+            max_tokens=2000,
         )
 
     def get_model_for_task(self, task_type: str):

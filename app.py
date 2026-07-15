@@ -10,20 +10,13 @@ Provides web interface for:
 
 try:
     from dotenv import load_dotenv
-    load_dotenv()  # Load .env file (local dev only — no-op on Streamlit Cloud)
+    load_dotenv()  # Local dev only — Streamlit Cloud uses App secrets
 except ImportError:
-    pass  # python-dotenv not available on Streamlit Cloud; secrets come from st.secrets
+    pass
 
 import streamlit as st
 import pandas as pd
 import os
-
-# Streamlit Cloud: fall back to st.secrets if env var not set via .env
-if not os.getenv("OPENROUTER_API_KEY"):
-    try:
-        os.environ["OPENROUTER_API_KEY"] = st.secrets["OPENROUTER_API_KEY"]
-    except Exception:
-        pass  # Key not found — app will show the warning banner
 import json
 import sys
 from datetime import datetime
@@ -39,7 +32,7 @@ from tools import data_tools, analysis_tools, viz_tools
 
 
 # ============================================================================
-# STREAMLIT PAGE CONFIG
+# STREAMLIT PAGE CONFIG (must be the first Streamlit command)
 # ============================================================================
 
 st.set_page_config(
@@ -48,6 +41,65 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+
+
+def ensure_openrouter_api_key() -> Optional[str]:
+    """
+    Resolve OPENROUTER_API_KEY from env (local .env) or Streamlit secrets (Cloud).
+
+    Returns the key if found, else None. Always sets os.environ when found so
+    model_router / LangChain can read it the same way locally and on Cloud.
+    """
+    key = os.getenv("OPENROUTER_API_KEY")
+    if key and str(key).strip():
+        return str(key).strip()
+
+    # Streamlit Cloud / local secrets.toml
+    try:
+        secrets = st.secrets
+    except Exception:
+        return None
+
+    candidates = []
+    try:
+        candidates.append(secrets.get("OPENROUTER_API_KEY"))
+    except Exception:
+        pass
+    try:
+        # Nested: [openrouter] api_key = "..."
+        candidates.append(secrets["openrouter"]["api_key"])
+    except Exception:
+        pass
+    try:
+        candidates.append(secrets.get("openrouter_api_key"))
+    except Exception:
+        pass
+
+    for candidate in candidates:
+        if candidate and str(candidate).strip():
+            value = str(candidate).strip()
+            os.environ["OPENROUTER_API_KEY"] = value
+            return value
+    return None
+
+
+def ensure_model_router():
+    """Create or recover the model router after secrets are available."""
+    if st.session_state.get("model_router") is not None:
+        return st.session_state.model_router
+
+    api_key = ensure_openrouter_api_key()
+    if not api_key:
+        st.session_state.model_router = None
+        return None
+
+    try:
+        st.session_state.model_router = model_router.create_model_router()
+        return st.session_state.model_router
+    except Exception as e:
+        st.session_state.model_router = None
+        st.session_state.model_router_error = str(e)
+        return None
 
 st.markdown("""
     <style>
@@ -97,34 +149,34 @@ st.markdown("""
 
 def initialize_session_state():
     """Initialize session state variables."""
+    # Secrets must load before model router (esp. Streamlit Cloud)
+    ensure_openrouter_api_key()
+
     if "uploaded_files" not in st.session_state:
         st.session_state.uploaded_files = {}
-    
+
     if "processed_data" not in st.session_state:
         st.session_state.processed_data = {}
-    
+
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = []
-    
+
     if "supervisor" not in st.session_state:
         try:
             st.session_state.supervisor = create_supervisor()
         except Exception as e:
-            st.warning(f"Could not initialize supervisor: {str(e)}")
             st.session_state.supervisor = None
-    
+            st.session_state.supervisor_error = str(e)
+
     if "analysis_cache" not in st.session_state:
         st.session_state.analysis_cache = {}
-    
+
     if "uploader_key" not in st.session_state:
         st.session_state.uploader_key = 0
-    
+
     if "model_router" not in st.session_state:
-        try:
-            st.session_state.model_router = model_router.create_model_router()
-        except Exception as e:
-            st.warning(f"⚠️ OpenRouter API not configured. Set OPENROUTER_API_KEY environment variable.")
-            st.session_state.model_router = None
+        st.session_state.model_router = None
+        ensure_model_router()
 
 
 initialize_session_state()
@@ -282,20 +334,54 @@ def render_chat_interface():
         st.rerun()
 
 
+def _message_text(content) -> str:
+    """Normalize LLM response content (string or content blocks) to text."""
+    if content is None:
+        return ""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for block in content:
+            if isinstance(block, str):
+                parts.append(block)
+            elif isinstance(block, dict) and block.get("type") == "text":
+                parts.append(block.get("text", ""))
+            else:
+                parts.append(str(block))
+        return "".join(parts)
+    return str(content)
+
+
 def process_user_query(user_query: str) -> str:
     """
     Process user query and return response using the LLM.
     """
     if not st.session_state.processed_data:
         return "Please upload data first using the sidebar."
-    
-    if getattr(st.session_state, "model_router", None) is None:
-        api_key_set = bool(os.getenv("OPENROUTER_API_KEY"))
-        return f"⚠️ AI models not initialized. Please set your OPENROUTER_API_KEY environment variable.\n\nAPI Key status: {'Set' if api_key_set else 'Not set'}"
-        
+
+    # Re-resolve secrets / router on every query (Cloud sessions can start
+    # before secrets are visible, or after a deploy with old state).
+    ensure_openrouter_api_key()
+    router = ensure_model_router()
+    if router is None:
+        api_key_set = bool(ensure_openrouter_api_key())
+        init_err = st.session_state.get("model_router_error", "")
+        return (
+            "⚠️ AI models not initialized.\n\n"
+            f"**API key status:** {'Found' if api_key_set else 'Not set'}\n\n"
+            "On **Streamlit Cloud**, set the secret in *App settings → Secrets*:\n"
+            "```toml\n"
+            'OPENROUTER_API_KEY = "sk-or-v1-..."\n'
+            "```\n"
+            "Then click **Reboot** so the new code and secrets load.\n\n"
+            "Locally, put the same key in your `.env` file.\n"
+            f"{('Init error: ' + init_err) if init_err else ''}"
+        )
+
     try:
         from langchain_core.messages import HumanMessage, SystemMessage
-        
+
         # 1. Build a contextual summary of the uploaded data
         data_context = []
         for filename, sheets_dict in st.session_state.processed_data.items():
@@ -303,7 +389,7 @@ def process_user_query(user_query: str) -> str:
                 data_context.append(f"### Sheet: {sheet_type}")
                 data_context.append(f"- Columns: {', '.join(df.columns.tolist())}")
                 data_context.append(f"- Rows: {len(df)}")
-                
+
                 # Add sample numerical statistics
                 numeric_cols = df.select_dtypes(include=['number']).columns.tolist()
                 if numeric_cols:
@@ -311,9 +397,9 @@ def process_user_query(user_query: str) -> str:
                     means = df[numeric_cols].mean().round(2).to_dict()
                     data_context.append(f"- Averages: {means}")
                 data_context.append("")
-                
+
         context_str = "\n".join(data_context)
-        
+
         # 2. Setup the prompt
         system_prompt = f"""You are an expert Agricultural Business Intelligence Agent named Coffee Analytics Copilot.
 You have access to the following dataset context from the user's uploaded files:
@@ -325,20 +411,57 @@ If the query asks for complex calculations (like regression or complex forecasti
 explain what the data suggests based on the averages and trends, and recommend using the dashboard's built-in 'Quick Analysis' buttons (Correlations, Trends, etc.) to generate precise charts.
 Use markdown formatting (bolding, bullet points) to make your response clear and easy to read."""
 
-        # 3. Invoke the LLM
-        model = st.session_state.model_router.get_synthesis_model()
+        # 3. Invoke the LLM (auto free router; fall back to a named free model)
         messages = [
             SystemMessage(content=system_prompt),
             HumanMessage(content=user_query)
         ]
-        
-        response = model.invoke(messages)
-        return response.content
-        
+
+        last_error = None
+        # Prefer free auto-router, then specific free models if one provider is down
+        for model_key in ("auto", "llama", "gpt_oss"):
+            try:
+                if model_key == "auto":
+                    model = router.get_synthesis_model("auto")
+                else:
+                    model = router.get_fast_model(model_key)
+                response = model.invoke(messages)
+                text = _message_text(getattr(response, "content", response))
+                if text and text.strip():
+                    return text
+            except Exception as e:
+                last_error = e
+                continue
+
+        raise last_error or RuntimeError("No free model returned a response")
+
     except Exception as e:
         import traceback
         error_details = traceback.format_exc()
-        return f"⚠️ Error processing query with AI: {str(e)}\n\nDetails:\n{error_details}\n\nPlease ensure your OpenRouter API key is valid."
+        err = str(e)
+        hint = ""
+        if "credit" in err.lower() or "402" in err or "max_tokens" in err.lower():
+            hint = (
+                "\n\n**Hint:** This usually means a non-free model was requested or free "
+                "rate limits were hit. Confirm the deployed app is on the latest commit "
+                "(uses `openrouter/free`), then reboot the Streamlit app. "
+                "Free tier is ~50 requests/day without purchased credits."
+            )
+        elif "401" in err or "auth" in err.lower() or "api key" in err.lower():
+            hint = (
+                "\n\n**Hint:** Check `OPENROUTER_API_KEY` in Streamlit Cloud "
+                "App settings → Secrets, then reboot."
+            )
+        elif "429" in err or "rate" in err.lower() or "TooManyRequests" in err:
+            hint = (
+                "\n\n**Hint:** Free-model rate limit. Wait and retry, or add a small "
+                "credit balance on OpenRouter for higher free-model limits."
+            )
+        return (
+            f"⚠️ Error processing query with AI: {err}\n\n"
+            f"Details:\n```\n{error_details}\n```"
+            f"{hint}"
+        )
 
 
 def render_analysis_section():
@@ -480,13 +603,20 @@ def main():
     # Sidebar
     render_sidebar()
     
-    # Check API key
-    if not os.getenv("OPENROUTER_API_KEY"):
+    # Check API key (env locally, secrets on Streamlit Cloud)
+    if not ensure_openrouter_api_key():
         st.warning(
             "⚠️ **OpenRouter API key not configured**\n\n"
-            "Please set the `OPENROUTER_API_KEY` environment variable in your `.env` file.\n\n"
+            "**Streamlit Cloud:** App settings → Secrets → add:\n"
+            "```toml\n"
+            'OPENROUTER_API_KEY = "sk-or-v1-your-key"\n'
+            "```\n"
+            "Then **Reboot** the app.\n\n"
+            "**Local:** set `OPENROUTER_API_KEY` in your `.env` file.\n\n"
             "Get a free API key at https://openrouter.ai"
         )
+    elif st.session_state.get("model_router") is None:
+        ensure_model_router()
     
     # Main content tabs
     tab1, tab2, tab3 = st.tabs(["📊 Dashboard", "💬 Chat", "📁 Data"])
