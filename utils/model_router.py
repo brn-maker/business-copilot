@@ -16,16 +16,15 @@ from langchain_openai import ChatOpenAI
 class ModelRouter:
     """Routes LLM requests to cost-optimized models."""
     
-    # Model configurations (OpenRouter model IDs)
     FAST_MODELS = {
-        "llama": "meta-llama/llama-3.1-8b-instruct",
-        "gemini": "google/gemma-2-9b-it",
+        "llama": "meta-llama/llama-3.1-8b-instruct:free",
+        "gemini": "google/gemma-2-9b-it:free",
         "mistral": "mistralai/mistral-nemo",
     }
     
     SYNTHESIS_MODELS = {
-        "gemini_pro": "google/gemma-2-9b-it", # Capable model for synthesis
-        "llama_large": "meta-llama/llama-3.1-70b-instruct",
+        "gemini_pro": "google/gemma-2-9b-it:free", # Capable model for synthesis
+        "llama_large": "meta-llama/llama-3.1-8b-instruct:free",
     }
     
     def __init__(
@@ -67,6 +66,7 @@ class ModelRouter:
                 model=model_id,
                 openrouter_api_key=self.api_key,
                 temperature=0.3,  # Lower temp for consistency in analysis
+                max_tokens=4000,  # Prevent credit limit errors on free tier
             )
         return ChatOpenAI(
             model=model_id,
@@ -84,6 +84,7 @@ class ModelRouter:
                 model=model_id,
                 openrouter_api_key=self.api_key,
                 temperature=0.7,  # Higher temp for creative recommendations
+                max_tokens=4000,  # Prevent credit limit errors on free tier
             )
         return ChatOpenAI(
             model=model_id,
