@@ -196,12 +196,12 @@ Upload ANY Excel file → System auto-detects relevant sheets:
 
 ### Change Default Models
 
-Edit `utils/model_router.py` (free tier needs `:free` model IDs only):
+Edit `utils/model_router.py` — chat tries free models in order until one works:
 ```python
-FAST_MODELS = {
-    "auto": "openrouter/free",  # Change key in create_model_router() defaults
-    "llama": "meta-llama/llama-3.2-3b-instruct:free",
-}
+FREE_MODEL_CHAIN = [
+    "google/gemma-4-26b-a4b-it:free",
+    "openai/gpt-oss-20b:free",
+]
 ```
 
 ### Modify Agent Prompts

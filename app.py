@@ -411,41 +411,27 @@ If the query asks for complex calculations (like regression or complex forecasti
 explain what the data suggests based on the averages and trends, and recommend using the dashboard's built-in 'Quick Analysis' buttons (Correlations, Trends, etc.) to generate precise charts.
 Use markdown formatting (bolding, bullet points) to make your response clear and easy to read."""
 
-        # 3. Invoke the LLM (auto free router; fall back to a named free model)
+        # 3. Invoke free models with automatic fallback (skips retired / rate-limited)
         messages = [
             SystemMessage(content=system_prompt),
-            HumanMessage(content=user_query)
+            HumanMessage(content=user_query),
         ]
-
-        last_error = None
-        # Prefer free auto-router, then specific free models if one provider is down
-        for model_key in ("auto", "llama", "gpt_oss"):
-            try:
-                if model_key == "auto":
-                    model = router.get_synthesis_model("auto")
-                else:
-                    model = router.get_fast_model(model_key)
-                response = model.invoke(messages)
-                text = _message_text(getattr(response, "content", response))
-                if text and text.strip():
-                    return text
-            except Exception as e:
-                last_error = e
-                continue
-
-        raise last_error or RuntimeError("No free model returned a response")
+        return router.invoke_with_fallback(messages, temperature=0.7, max_tokens=2000)
 
     except Exception as e:
         import traceback
         error_details = traceback.format_exc()
         err = str(e)
         hint = ""
-        if "credit" in err.lower() or "402" in err or "max_tokens" in err.lower():
+        if "No endpoints found" in err or "gemma-2" in err:
             hint = (
-                "\n\n**Hint:** This usually means a non-free model was requested or free "
-                "rate limits were hit. Confirm the deployed app is on the latest commit "
-                "(uses `openrouter/free`), then reboot the Streamlit app. "
-                "Free tier is ~50 requests/day without purchased credits."
+                "\n\n**Hint:** A free model ID was retired. Reboot the Streamlit app so it "
+                "loads the latest fallback list (gemma-4, gpt-oss, etc.)."
+            )
+        elif "credit" in err.lower() or "402" in err or "max_tokens" in err.lower():
+            hint = (
+                "\n\n**Hint:** Free-tier credit/token limit. Use only free models "
+                "(already configured) or add credits at https://openrouter.ai/settings/credits"
             )
         elif "401" in err or "auth" in err.lower() or "api key" in err.lower():
             hint = (
@@ -454,8 +440,13 @@ Use markdown formatting (bolding, bullet points) to make your response clear and
             )
         elif "429" in err or "rate" in err.lower() or "TooManyRequests" in err:
             hint = (
-                "\n\n**Hint:** Free-model rate limit. Wait and retry, or add a small "
-                "credit balance on OpenRouter for higher free-model limits."
+                "\n\n**Hint:** Free-model rate limit (~50/day without credits). "
+                "Wait and retry, or add a small credit balance on OpenRouter."
+            )
+        elif "All free OpenRouter models failed" in err:
+            hint = (
+                "\n\n**Hint:** Every free model was offline or rate-limited. "
+                "Retry in a few minutes, or top up OpenRouter credits for higher limits."
             )
         return (
             f"⚠️ Error processing query with AI: {err}\n\n"
