@@ -501,6 +501,44 @@ def main():
         
         with col2:
             render_analysis_section()
+            
+        if st.session_state.processed_data:
+            st.markdown("---")
+            st.markdown("### 📊 Distribution Analysis")
+            
+            combined_data = {}
+            for filename, sheets_dict in st.session_state.processed_data.items():
+                for sheet_type, df in sheets_dict.items():
+                    if sheet_type not in combined_data:
+                        combined_data[sheet_type] = df
+                        
+            if combined_data:
+                dist_col1, dist_col2, dist_col3 = st.columns(3)
+                with dist_col1:
+                    dataset_name = st.selectbox("Select Dataset", list(combined_data.keys()), key="dist_dataset")
+                
+                df_dist = combined_data[dataset_name]
+                # Fallback to number if no objects exist to allow some visualization
+                cat_cols = df_dist.select_dtypes(include=['object', 'category']).columns.tolist()
+                if not cat_cols:
+                    cat_cols = df_dist.columns.tolist()
+                    
+                if cat_cols:
+                    with dist_col2:
+                        cat_col = st.selectbox("Select Category", cat_cols, key="dist_category")
+                    with dist_col3:
+                        chart_type = st.radio("Chart Type", ["Pie Chart", "Bar Graph"], horizontal=True, key="dist_chart_type")
+                    
+                    chart_mode = "pie" if chart_type == "Pie Chart" else "bar"
+                    fig = viz_tools.create_category_distribution_chart(
+                        df_dist, 
+                        cat_col, 
+                        chart_type=chart_mode,
+                        title=f"Distribution of {cat_col}"
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
+                else:
+                    st.info(f"No columns found in {dataset_name} for distribution analysis.")
     
     with tab2:
         st.markdown('<div class="section-header">💬 Chat with Analytics Assistant</div>', unsafe_allow_html=True)

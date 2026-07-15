@@ -336,6 +336,34 @@ def create_distribution_chart(
     return fig
 
 
+def create_category_distribution_chart(
+    df: pd.DataFrame,
+    category_column: str,
+    chart_type: str = "pie",
+    title: str = "Distribution",
+) -> go.Figure:
+    """
+    Create a pie or bar chart for categorical distribution (counts).
+    """
+    counts = df[category_column].value_counts().reset_index()
+    counts.columns = [category_column, 'Count']
+    
+    if len(counts) > 15:
+        counts = counts.head(15)
+        title += " (Top 15)"
+        
+    if chart_type.lower() == "pie":
+        fig = px.pie(counts, names=category_column, values='Count', title=title)
+    else:
+        fig = px.bar(counts, x=category_column, y='Count', title=title, color=category_column)
+        
+    fig.update_layout(
+        template="plotly_white",
+        height=500,
+    )
+    return fig
+
+
 def create_forecast_chart(
     historical_dates: List,
     historical_values: List,
